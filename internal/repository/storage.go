@@ -103,11 +103,11 @@ func (s Store) Register(ctx context.Context, user User) error {
 
 	resRegister, err := s.NamedExecContext(ctx, query, &user)
 	if err != nil {
-		return err
+		return fmt.Errorf("s.NamedExecContext: %w", err)
 	}
 
 	if _, err = resRegister.RowsAffected(); err != nil {
-		return err
+		return fmt.Errorf("resRegister.RowsAffected(): %w", err)
 	}
 
 	query = `
@@ -116,11 +116,11 @@ func (s Store) Register(ctx context.Context, user User) error {
 
 	resBalance, err := s.ExecContext(ctx, query, user.ID)
 	if err != nil {
-		return err
+		return fmt.Errorf("s.ExecContext: %w", err)
 	}
 
 	if _, err = resBalance.RowsAffected(); err != nil {
-		return err
+		return fmt.Errorf("resBalance.RowsAffected: %w", err)
 	}
 
 	return nil
@@ -137,7 +137,6 @@ func (s Store) Login(ctx context.Context, user User) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("s.QueryContext: %w", err)
 	}
-
 	err = rows.Err()
 	if err != nil {
 		return "", fmt.Errorf("rows.Err: %w", err)
@@ -147,9 +146,12 @@ func (s Store) Login(ctx context.Context, user User) (string, error) {
 	for rows.Next() {
 		err = rows.Scan(&token)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("rows.Scan: %w", err)
 		}
 	}
+	defer func() {
+		err = rows.Close()
+	}()
 
 	return token, nil
 }
@@ -164,11 +166,11 @@ func (s Store) CheckToken(ctx context.Context, token string) (uuid.UUID, error) 
 	var id []uuid.UUID
 	err := s.SelectContext(ctx, &id, query, token)
 	if err != nil {
-		return uuid.UUID{}, err
+		return uuid.UUID{}, fmt.Errorf("s.SelectContext: %w", err)
 	}
 
 	if id == nil {
-		return uuid.UUID{}, errors.New("token invalid")
+		return uuid.UUID{}, oops.ErrInvalidToken
 	}
 
 	return id[0], nil
@@ -284,6 +286,9 @@ func (s Store) Balance(ctx context.Context, id uuid.UUID) (Balance, error) {
 			return Balance{}, fmt.Errorf("rows.Next: %w", err)
 		}
 	}
+	defer func() {
+		err = rows.Close()
+	}()
 
 	return balance, nil
 }
@@ -305,7 +310,7 @@ func (s Store) Withdraw(ctx context.Context, req Order, sum float32) error {
 	   current=$1,
 	   withdrawn=withdrawn+$2
 	WHERE user_id=$3`
-	rowsBalanceUpdate, err := txBalance.Query(queryBalanceUpdate, *req.Accrual, sum, req.UserID)
+	resBalanceUpdate, err := txBalance.Exec(queryBalanceUpdate, *req.Accrual, sum, req.UserID)
 	if err != nil {
 		err = txBalance.Rollback()
 		if err != nil {
@@ -313,20 +318,20 @@ func (s Store) Withdraw(ctx context.Context, req Order, sum float32) error {
 		}
 		return fmt.Errorf("tx.QueryContext: %w", err)
 	}
-	err = rowsBalanceUpdate.Err()
+	_, err = resBalanceUpdate.RowsAffected()
 	if err != nil {
 		err = txBalance.Rollback()
 		if err != nil {
 			return fmt.Errorf("tx.Rollback: %w", err)
 		}
-		return fmt.Errorf("rowsBalanceUpdate.Err: %w", err)
+		return fmt.Errorf("resBalanceUpdate.RowsAffected: %w", err)
 	}
 
 	queryWithdrawUpdate := `
 	INSERT INTO withdrawns (user_id, number, sum, processed_at)
 	VALUES ($1, $2, $3, NOW())
 	`
-	rowsWithdrawUpdate, err := txWithdraw.Query(queryWithdrawUpdate, req.UserID, req.Number, sum)
+	resWithdrawUpdate, err := txWithdraw.Exec(queryWithdrawUpdate, req.UserID, req.Number, sum)
 	if err != nil {
 		err = txWithdraw.Rollback()
 		if err != nil {
@@ -334,13 +339,13 @@ func (s Store) Withdraw(ctx context.Context, req Order, sum float32) error {
 		}
 		return fmt.Errorf("tx.QueryContext: %w", err)
 	}
-	err = rowsWithdrawUpdate.Err()
+	_, err = resWithdrawUpdate.RowsAffected()
 	if err != nil {
 		err = txWithdraw.Rollback()
 		if err != nil {
 			return fmt.Errorf("tx.Rollback: %w", err)
 		}
-		return fmt.Errorf("rowsWithdrawUpdate.Err: %w", err)
+		return fmt.Errorf("resWithdrawUpdate.RowsAffected: %w", err)
 	}
 	err = txBalance.Commit()
 	if err != nil {
@@ -374,7 +379,7 @@ func (s Store) Withdrawals(ctx context.Context, id uuid.UUID) ([]Withdrawals, er
 	var withdrawals []Withdrawals
 	err := s.SelectContext(ctx, &withdrawals, query, id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("s.SelectContext: %w", err)
 	}
 
 	if withdrawals == nil {

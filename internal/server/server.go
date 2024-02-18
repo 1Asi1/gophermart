@@ -18,6 +18,17 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	maxConnDB         = 10
+	maxConnLifeTimeDB = 30
+	maxConnIdleTimeDB = 30
+
+	ReadTimeoutServer  = 5
+	WriteTimeoutServer = 10
+	IdleTimeoutServer  = 120
+	timeoutShutdown    = 5
+)
+
 type Server struct {
 	log zerolog.Logger
 }
@@ -39,9 +50,9 @@ func (s *Server) Run() {
 
 	st, err := repository.New(repository.Config{
 		ConnDSN:         cfg.DBConnDSN,
-		MaxConn:         10,
-		MaxConnLifeTime: 30 * time.Second,
-		MaxConnIdleTime: 30 * time.Second,
+		MaxConn:         maxConnDB,
+		MaxConnLifeTime: maxConnLifeTimeDB * time.Second,
+		MaxConnIdleTime: maxConnIdleTimeDB * time.Second,
 	})
 	if err != nil {
 		l.Fatal().Err(err).Msg("repository.New")
@@ -64,15 +75,14 @@ func (s *Server) Run() {
 	httpServer := &http.Server{
 		Addr:         cfg.ServerAddr,
 		Handler:      rest.New(sv, l),
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		ReadTimeout:  ReadTimeoutServer * time.Second,
+		WriteTimeout: WriteTimeoutServer * time.Second,
+		IdleTimeout:  IdleTimeoutServer * time.Second,
 	}
 
 	errs.Go(func() error {
 		if err = httpServer.ListenAndServe(); err != nil {
 			log.Fatalf("http.ListenAndServe: %v", err)
-			return err
 		}
 		return nil
 	})
@@ -81,7 +91,7 @@ func (s *Server) Run() {
 
 	l.Info().Msg("shutting down gracefully")
 
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), timeoutShutdown*time.Second)
 	defer cancel()
 
 	// Perform application shutdown with a maximum timeout of 5 seconds.

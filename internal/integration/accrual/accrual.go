@@ -51,6 +51,9 @@ func (c Client) GetOrder(num string) (Response, error) {
 	}
 
 	if resp.StatusCode() != http.StatusOK {
+		if resp.StatusCode() == http.StatusTooManyRequests {
+			return Response{}, fmt.Errorf(":%w", oops.ErrStatusTooManyRequests)
+		}
 		return Response{}, fmt.Errorf(":%w", oops.ErrStatusNotOK)
 	}
 

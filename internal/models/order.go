@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const limit = 9
+
 type OrderRequest struct {
 	UserID uuid.UUID `json:"user_id"`
 	Number string    `json:"number"`
@@ -38,8 +40,8 @@ func luhnAlgorithm(number string) bool {
 
 		if isSecondDigit {
 			digit *= 2
-			if digit > 9 {
-				digit -= 9
+			if digit > limit {
+				digit -= limit
 			}
 		}
 

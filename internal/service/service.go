@@ -72,7 +72,7 @@ func (s *Service) Login(ctx context.Context, u models.UserRequest) (string, erro
 func (s *Service) CheckAccess(ctx context.Context, token string) (string, error) {
 	id, err := s.store.CheckToken(ctx, token)
 	if err != nil {
-		return "", fmt.Errorf(":%w", err)
+		return "", fmt.Errorf("s.store.CheckToken: %w", err)
 	}
 
 	return id.String(), nil
@@ -135,7 +135,7 @@ func (s *Service) Withdraw(ctx context.Context, id uuid.UUID, req models.Withdra
 		return oops.ErrInsufficientFunds
 	}
 
-	balance.Current = balance.Current - req.Sum
+	balance.Current -= req.Sum
 
 	model := repository.Order{
 		UserID:  id,

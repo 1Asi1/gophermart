@@ -12,14 +12,14 @@ func (s Store) Update(ctx context.Context, order Order) error {
 	UPDATE orders
 	SET accrual=$1,status=$2,checked=$3
 	WHERE user_id=$4 AND number=$5`
-	rows, err := s.QueryContext(ctx, query, order.Accrual, order.Status, order.Checked, order.UserID, order.Number)
+	res, err := s.ExecContext(ctx, query, order.Accrual, order.Status, order.Checked, order.UserID, order.Number)
 	if err != nil {
 		return fmt.Errorf("s.QueryContext: %w", err)
 	}
 
-	err = rows.Err()
+	_, err = res.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("rows.Err: %w", err)
+		return fmt.Errorf("res.RowsAffected(): %w", err)
 	}
 
 	return nil
@@ -30,20 +30,20 @@ func (s Store) UpdateBalance(ctx context.Context, order Order) error {
 	UPDATE balances
 	SET current=current+$1
 	WHERE user_id=$2`
-	rows, err := s.QueryContext(ctx, query, *order.Accrual, order.UserID)
+	res, err := s.ExecContext(ctx, query, *order.Accrual, order.UserID)
 	if err != nil {
 		return fmt.Errorf("s.QueryContext: %w", err)
 	}
 
-	err = rows.Err()
+	_, err = res.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("rows.Err: %w", err)
+		return fmt.Errorf("res.RowsAffected(): %w", err)
 	}
 
 	return nil
 }
 
-func (s Store) GetOrdersNumbers(ctx context.Context) ([]Order, error) {
+func (s Store) GetOrdersNumbers(ctx context.Context, offset int) ([]Order, error) {
 	query := `
 	SELECT
 	    user_id,
@@ -53,10 +53,13 @@ func (s Store) GetOrdersNumbers(ctx context.Context) ([]Order, error) {
 	    uploaded_at,
 	    checked
 	FROM orders
-	WHERE NOT checked`
+	WHERE NOT checked
+	ORDER BY uploaded_at
+	LIMIT 100 OFFSET $1
+	`
 
 	var orders []Order
-	err := s.SelectContext(ctx, &orders, query)
+	err := s.SelectContext(ctx, &orders, query, offset)
 	if err != nil {
 		return nil, fmt.Errorf("s.SelectContext: %w", err)
 	}
