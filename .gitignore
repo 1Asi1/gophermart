@@ -13,7 +13,8 @@
 
 # Binaries
 cmd/gophermart/main
-cmd/gophermart/gophermart
+cmd/gophermart/gophermart_arm64
+golangci-lint
 
 # Dependency directories (remove the comment below to include it)
 vendor/
@@ -21,3 +22,4 @@ vendor/
 # IDEs directories
 .idea
 .vscode
+.env
